@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./services/auth";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
+import Overview from "./pages/Overview";
 import Investigations from "./pages/Investigations";
 import TaskDetail from "./pages/TaskDetail";
 import Approvals from "./pages/Approvals";
@@ -16,7 +17,8 @@ export default function App() {
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route index element={<Investigations />} />
+        <Route index element={<Overview />} />
+        <Route path="investigations" element={<Investigations />} />
         <Route path="tasks/:id" element={<TaskDetail />} />
         <Route path="approvals" element={<Approvals />} />
         <Route path="clients" element={<Clients />} />

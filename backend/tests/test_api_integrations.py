@@ -232,3 +232,18 @@ def test_integration_failure_never_changes_outcome(env, autotask):
     with tenant_scope(env.a.id):
         assert session().get(Task, r.get_json()["task_id"]).state == "COMPLETED"
         assert session().scalar(select(AuditEvent).where(AuditEvent.action == "integration.error"))
+
+
+def test_dashboard_summary_is_tenant_scoped_and_accurate(env):
+    env.host.services["nginx.service"] = "failed"
+    tech, other = login(env, env.a, "technician"), login(env, env.b, "technician")
+    api(env, tech, "post", "/api/tasks", json={"device_id": env.a.device_id, "mode": "maintenance", "title": "a1", "description": "service:nginx.service"})
+    api(env, tech, "post", "/api/tasks", json={"device_id": env.a.device_id, "mode": "analysis_only", "title": "a2"})
+    code, d = api(env, tech, "get", "/api/dashboard/summary?days=14")
+    assert code == 200 and d["kpis"]["investigations"] == 2 and d["kpis"]["awaiting_approval"] == 1
+    assert sum(x["count"] for x in d["per_day"]) == 2 and len(d["per_day"]) == 14
+    assert d["attention"][0]["state"] == "AWAITING_APPROVAL" and d["posture"]["audit_chain_ok"] is True
+    assert {x["severity"]: x["count"] for x in d["by_severity"]}["high"] >= 1
+    _, o = api(env, other, "get", "/api/dashboard/summary")
+    assert o["kpis"]["investigations"] == 0 and o["attention"] == [] and o["recent"] == []
+    assert api(env, tech, "get", "/api/dashboard/summary?days=5")[0] == 400

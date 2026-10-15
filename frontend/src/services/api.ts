@@ -3,6 +3,7 @@ export interface User { id: number; email: string; name: string; role: string; t
 export interface Client { id: number; name: string; status: string; ai_policy: string; maintenance_enabled: boolean }
 export interface Device { id: number; client_id: number; hostname: string; address: string; device_type: string; connector: string; status: string }
 export interface Task {
+  source_ref?: string | null;
   id: number; client_id: number; device_id: number; title: string; description: string; mode: "analysis_only" | "maintenance";
   state: string; source: string; created_at: string; completed_at: string | null; result: Record<string, unknown>;
   investigation?: Investigation | null; plans?: Plan[]; runs?: Run[];
@@ -64,4 +65,15 @@ export async function streamTimeline(taskId: number, onEvent: (e: TimelineEvent)
       if (m && chunk.includes("event: transition")) onEvent(JSON.parse(m[1]) as TimelineEvent);
     }
   }
+}
+
+export interface Summary {
+  days: number;
+  kpis: { open: number; awaiting_approval: number; investigations: number; success_rate: number | null; runs_finished: number; high_findings: number; mttr_minutes: number | null };
+  per_day: { date: string; count: number }[];
+  by_severity: { severity: string; count: number }[];
+  by_device_type: { type: string; count: number }[];
+  attention: { id: number; title: string; state: string; mode: string; at: string }[];
+  recent: { task_id: number; title: string; to_state: string; actor: string; at: string }[];
+  posture: { clients: number; devices: number; maintenance_enabled: number; local_only: number; pending_plans: number; audit_chain_ok: boolean };
 }

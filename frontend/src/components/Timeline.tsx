@@ -20,7 +20,7 @@ export default function Timeline({ taskId, onChange }: { taskId: number; onChang
   return (
     <ol className="timeline">
       {events.map((e) => (
-        <li key={e.seq}><time>{fmt(e.at)}</time> <Badge value={e.to_state} /> <small>{e.actor}</small></li>
+        <li key={e.seq}><time>{fmt(e.at)}</time><Badge value={e.to_state} /><small>{e.actor}</small></li>
       ))}
     </ol>
   );

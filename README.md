@@ -26,7 +26,7 @@ pytest                                        # 105 tests incl. failure injectio
 
 export DATABASE_URL=sqlite:///msp_dev.db MSP_FAKE_CONNECTORS=1
 python -m backend.cli demo                    # demo tenant + a device whose nginx is down
-flask --app backend.wsgi run -p 5000 &        # API
+flask --app backend.wsgi run -p 7171 &        # API (the UI dev server proxies /api to this port)
 cd frontend && npm install && npm run dev      # UI on http://localhost:5173
 ```
 Sign in as `technician@demo.test` (start an investigation; pick *Troubleshooting & Maintenance*, description

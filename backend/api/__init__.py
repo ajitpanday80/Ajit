@@ -27,8 +27,8 @@ def create_app(cfg: Config | None = None, *, init: bool = True) -> Flask:
         infra.hosts["demo-web.example"] = FakeHost(services={"nginx.service": "failed", "asterisk": "active"}, disk_pct=91)
         set_connector_factory(infra.factory)
 
-    from backend.api import admin, inventory, tasks, webhooks
-    for m in (admin, inventory, tasks, webhooks):
+    from backend.api import admin, dashboard, inventory, tasks, webhooks
+    for m in (admin, dashboard, inventory, tasks, webhooks):
         app.register_blueprint(m.bp)
 
     @app.get("/healthz")
