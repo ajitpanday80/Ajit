@@ -588,3 +588,30 @@ def test_expired_plan_requires_replan(env):
         with pytest.raises(changes.ApprovalError, match="expired"):
             changes.decide(session().get(ChangePlan, plan.id), session().get(User, env.a.user_ids["approver"]), "approve")
         assert session().get(Task, task.id).state == "EXPIRED"
+
+
+def test_local_model_review_is_advisory_and_never_uses_cloud(env):
+    from backend.models import Client
+    local = ScriptedProvider(fn=lambda s, u: '{"assessment":"looks fine","follow_ups":["watch logs"],"risks":[]}' if "REPORT" in u else "{}")
+    cloud = ScriptedProvider(fn=lambda s, u: "{}", local=False)
+    cloud.name = "claude"
+    svc().llm = LlmRouter(env.cfg, {"claude": cloud, "scripted": local})
+    with tenant_scope(env.a.id):
+        session().get(Client, env.a.client_id).ai_policy = "cloud_allowed"
+        session().commit()
+        plan = mk_plan(env, new_task(env, "maintenance"))
+        approve(env, plan)
+        run = execute_plan(plan.id)
+        rep = session().scalar(select(Report)).content
+    assert run.status == "SUCCEEDED" and "Local-model review (advisory" in rep and "watch logs" in rep
+    assert not any("REPORT:" in u for _, u in cloud.calls)               # post-run data never goes to the cloud model
+
+
+def test_failed_run_stays_failed_even_if_local_model_is_positive(env):
+    env.host.restart_works = False
+    svc().llm = LlmRouter(env.cfg, {"scripted": ScriptedProvider(fn=lambda s, u: '{"assessment":"all good, everything succeeded"}')})
+    with tenant_scope(env.a.id):
+        plan = mk_plan(env, new_task(env, "maintenance"))
+        approve(env, plan)
+        run = execute_plan(plan.id)
+        assert run.status == "ROLLED_BACK" and session().get(Task, run.task_id).state == "ROLLED_BACK"

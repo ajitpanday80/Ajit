@@ -38,13 +38,15 @@ class GateFailed(Exception):
         self.gate, self.detail = gate, detail
 
 
-def _gate(run: ExecutionRun, name: str, ok: bool, detail: str = "") -> None:
+def _gate(run: ExecutionRun, name: str, ok: bool, detail: str = "ok", fail: str | None = None) -> None:
+    """Record a gate.  ``detail`` is shown when it passes, ``fail`` (default: detail) when it does not."""
+    shown = detail if ok else (fail or detail)
     gr = dict(run.gate_results or {})
-    gr[name] = {"ok": ok, "detail": detail}
+    gr[name] = {"ok": ok, "detail": shown}
     run.gate_results = gr
     session().flush()
     if not ok:
-        raise GateFailed(name, detail)
+        raise GateFailed(name, shown)
 
 
 def _heartbeat(run: ExecutionRun) -> None:
@@ -130,21 +132,21 @@ def _pre_execution_gates(plan, task, device, run, actor_user_id):
     client = s.get(Client, task.client_id)
     # 1. approval matches the exact plan, in scope and in time
     ap = latest_approval(plan)
-    _gate(run, "approval_exists", ap is not None and ap.decision == "approve", "no approving decision")
+    _gate(run, "approval_exists", ap is not None and ap.decision == "approve", fail="no approving decision")
     _gate(run, "approval_matches_plan", ap.plan_hash == plan.plan_hash == compute_hash(plan.canonical),
-          "approval hash / plan integrity mismatch")
-    _gate(run, "approval_fresh", plan.expires_at >= utcnow(), "approval window expired")
+          fail="approval hash / plan integrity mismatch")
+    _gate(run, "approval_fresh", plan.expires_at >= utcnow(), fail="approval window expired")
     if plan.requires_second_approver:
-        _gate(run, "second_approver", ap.approver_id != task.requested_by, "approver is the requester")
+        _gate(run, "second_approver", ap.approver_id != task.requested_by, fail="approver is the requester")
     if plan.requires_no_rollback_ack:
-        _gate(run, "no_rollback_ack", ap.acknowledged_no_rollback, "no-rollback acknowledgement missing")
+        _gate(run, "no_rollback_ack", ap.acknowledged_no_rollback, fail="no-rollback acknowledgement missing")
     # 2. permissions / mode
     if actor_user_id:
         u = s.get(User, actor_user_id)
-        _gate(run, "permission_execute", u is not None and rbac.has(u.role, "plan.execute"), "role may not execute")
-    _gate(run, "mode_maintenance", task.mode == "maintenance", "task is Analysis Only")
+        _gate(run, "permission_execute", u is not None and rbac.has(u.role, "plan.execute"), fail="role may not execute")
+    _gate(run, "mode_maintenance", task.mode == "maintenance", fail="task is Analysis Only")
     _gate(run, "client_maintenance_enabled", bool(client and client.maintenance_enabled and client.status == "active"),
-          "maintenance disabled for client")
+          fail="maintenance disabled for client")
     # 3. exclusive access to the device
     _acquire_lock(device, run)
     _gate(run, "device_lock", True, "acquired")
@@ -159,7 +161,7 @@ def _pre_execution_gates(plan, task, device, run, actor_user_id):
         cur = run_probe(task, device, st["state_probe"], phase="precheck", plan=plan, run=run, step_idx=st["idx"])
         fp = hashlib.sha256(cur.stdout.strip().encode()).hexdigest()
         _gate(run, f"no_drift_{st['idx']}", fp == st["state_fingerprint"],
-              "device state changed since the plan was approved — re-plan required")
+              fail="device state changed since the plan was approved — re-plan required")
     s.commit()
     # 5. backup → verify recoverability (BLOCKS modification on failure)
     workflow.advance(task, "BACKING_UP", actor="system", detail={"run_id": run.id})

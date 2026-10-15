@@ -59,15 +59,26 @@ class Config:
             webhook_secret=os.environ.get("WEBHOOK_SECRET", ""),
             cors_origins=[o for o in os.environ.get("CORS_ORIGINS", "").split(",") if o],
         )
-        c.finalize()
+        c.finalize(persist_dev_key=True)
         return c
 
-    def finalize(self) -> "Config":
+    def finalize(self, persist_dev_key: bool = False) -> "Config":
         if self.env == "production":
             missing = [n for n, v in (("SECRET_KEY", self.secret_key), ("MASTER_KEYS", self.master_keys)) if not v]
             if missing:
                 raise RuntimeError(f"Missing required production settings: {', '.join(missing)}")
         else:
             self.secret_key = self.secret_key or "dev-secret-change-me-dev-secret-change-me"
+            if not self.master_keys and persist_dev_key:
+                # dev only: keep one key across processes so seeded credentials stay decryptable
+                path = os.environ.get("MSP_DEV_KEY_FILE", ".msp_dev_master_key")
+                if os.path.exists(path):
+                    self.master_keys = open(path).read().strip()
+                else:
+                    self.master_keys = Fernet.generate_key().decode()
+                    with open(path, "w") as fh:
+                        os.chmod(path, 0o600) if os.path.exists(path) else None
+                        fh.write(self.master_keys)
+                    os.chmod(path, 0o600)
             self.master_keys = self.master_keys or Fernet.generate_key().decode()
         return self

@@ -41,14 +41,17 @@ class WorkerCrash(BaseException):
 
 
 class FakeInfrastructure:
-    def __init__(self):
+    def __init__(self, auto: bool = False):
         self.hosts: dict[str, FakeHost] = {}
+        self.auto = auto          # demo mode: unknown addresses get a default healthy host
 
     def host(self, address: str, **kw) -> FakeHost:
         h = self.hosts.setdefault(address, FakeHost(**kw))
         return h
 
     def factory(self, device, credential):
+        if self.auto and device.address not in self.hosts:
+            self.hosts[device.address] = FakeHost()
         return FakeConnector(device, credential, self)
 
 

@@ -1,0 +1,14 @@
+FROM python:3.12-slim
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+RUN useradd -m -u 10001 app
+WORKDIR /srv/msp
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt pypsrp
+COPY backend backend
+COPY workers workers
+COPY migrations migrations
+COPY alembic.ini .
+USER app
+EXPOSE 8000
+# api: gunicorn; worker/beat are selected by docker-compose `command`
+CMD ["gunicorn", "-b", "0.0.0.0:8000", "-w", "4", "--timeout", "120", "--worker-class", "gthread", "--threads", "8", "backend.wsgi:app"]

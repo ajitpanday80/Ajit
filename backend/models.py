@@ -5,10 +5,14 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (JSON, Boolean, DateTime, Float, ForeignKey, Integer, LargeBinary,
                         String, Text, UniqueConstraint, event)
+from sqlalchemy.dialects.mysql import MEDIUMTEXT
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.db import Base
 from backend.tenancy import TenantScoped
+
+
+LongText = Text().with_variant(MEDIUMTEXT(), "mysql")  # MySQL TEXT caps at 64KB
 
 
 def utcnow() -> datetime:
@@ -138,7 +142,7 @@ class Task(TenantScoped, Base):
     device_id: Mapped[int] = mapped_column(ForeignKey("devices.id"))
     requested_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
     title: Mapped[str] = mapped_column(String(300))
-    description: Mapped[str] = mapped_column(Text, default="")
+    description: Mapped[str] = mapped_column(LongText, default="")
     mode: Mapped[str] = mapped_column(String(20))  # analysis_only | maintenance
     state: Mapped[str] = mapped_column(String(30), default="SUBMITTED", index=True)
     source: Mapped[str] = mapped_column(String(20), default="manual")  # manual | autotask | prtg
@@ -197,11 +201,11 @@ class Evidence(TenantScoped, Base):
     phase: Mapped[str] = mapped_column(String(20), default="diagnostics")
     operation: Mapped[str] = mapped_column(String(80))
     params: Mapped[dict] = mapped_column(JSON, default=dict)
-    command_display: Mapped[str] = mapped_column(Text, default="")
+    command_display: Mapped[str] = mapped_column(LongText, default="")
     exit_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    output_sanitized: Mapped[str] = mapped_column(Text, default="")
+    output_sanitized: Mapped[str] = mapped_column(LongText, default="")
     output_sha256: Mapped[str] = mapped_column(String(64), default="")
-    raw_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    raw_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary(16_000_000), nullable=True)
     truncated: Mapped[bool] = mapped_column(Boolean, default=False)
     duration_ms: Mapped[int] = mapped_column(Integer, default=0)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -230,8 +234,8 @@ class LlmCall(TenantScoped, Base):
     provider: Mapped[str] = mapped_column(String(30))
     model: Mapped[str] = mapped_column(String(80), default="")
     purpose: Mapped[str] = mapped_column(String(60))
-    prompt: Mapped[str] = mapped_column(Text, default="")
-    response: Mapped[str] = mapped_column(Text, default="")
+    prompt: Mapped[str] = mapped_column(LongText, default="")
+    response: Mapped[str] = mapped_column(LongText, default="")
     input_tokens: Mapped[int] = mapped_column(Integer, default=0)
     output_tokens: Mapped[int] = mapped_column(Integer, default=0)
     ok: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -246,7 +250,7 @@ class ChangePlan(TenantScoped, Base):
     task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id"), index=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
     steps: Mapped[list] = mapped_column(JSON)          # frozen after creation
-    canonical: Mapped[str] = mapped_column(Text)       # canonical JSON that was hashed
+    canonical: Mapped[str] = mapped_column(LongText)       # canonical JSON that was hashed
     plan_hash: Mapped[str] = mapped_column(String(64))
     # pending_approval | approved | rejected | expired | executing | executed | superseded
     status: Mapped[str] = mapped_column(String(24), default="pending_approval")
@@ -314,7 +318,7 @@ class ExecutionStep(TenantScoped, Base):
     # pending | started | succeeded | failed | unknown | rolled_back
     status: Mapped[str] = mapped_column(String(20), default="pending")
     exit_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    output_sanitized: Mapped[str] = mapped_column(Text, default="")
+    output_sanitized: Mapped[str] = mapped_column(LongText, default="")
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
@@ -464,7 +468,7 @@ class Report(TenantScoped, Base):
     task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id"), index=True)
     kind: Mapped[str] = mapped_column(String(30), default="incident")
     title: Mapped[str] = mapped_column(String(300))
-    content: Mapped[str] = mapped_column(Text)
+    content: Mapped[str] = mapped_column(LongText)
     created_by: Mapped[str] = mapped_column(String(100), default="system")
     created_at: Mapped[datetime] = _ts()
 

@@ -39,12 +39,15 @@ class LlmRouter:
                                 .where(LlmCall.tenant_id == tenant_id, LlmCall.at >= start)) or 0
 
     def ask_json(self, client: Client, task_id: int | None, purpose: str, system: str, user: str,
-                 max_tokens: int = 2000) -> tuple[dict | None, str]:
+                 max_tokens: int = 2000, local_only: bool = False) -> tuple[dict | None, str]:
         """Return (parsed_json | None, provider_label).  Never raises: AI is advisory and may be unavailable."""
         s = session()
         if self._tokens_this_month(client.tenant_id) >= self.cfg.llm_monthly_token_budget:
             return None, "budget_exhausted"
-        for p in self.candidates(client):
+        cands = self.candidates(client)
+        if local_only:
+            cands = [p for p in cands if p.local]
+        for p in cands:
             try:
                 resp = p.complete(system, user, max_tokens)
             except ProviderUnavailable as e:

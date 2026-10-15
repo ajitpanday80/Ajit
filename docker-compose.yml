@@ -1,0 +1,86 @@
+# AI-Powered MSP Infrastructure Operations Platform — Docker Compose (initial deployment)
+# 1. cp .env.example .env and fill in secrets   2. place TLS certs in deployment/certs/   3. docker compose up -d
+x-backend: &backend
+  build: { context: ., dockerfile: deployment/Dockerfile.backend }
+  env_file: .env
+  environment:
+    MSP_ENV: production
+    DATABASE_URL: mysql+pymysql://msp:${MYSQL_PASSWORD}@mysql:3306/msp?charset=utf8mb4
+    REDIS_URL: redis://redis:6379/0
+    JOBS_INLINE: "false"
+  depends_on:
+    mysql: { condition: service_healthy }
+    redis: { condition: service_started }
+  restart: unless-stopped
+  volumes:
+    # pinned host keys: the SSH connector rejects unknown hosts
+    - ./deployment/known_hosts:/home/app/.ssh/known_hosts:ro
+
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: msp
+      MYSQL_USER: msp
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_ai_ci", "--log-bin-trust-function-creators=0"]
+    volumes: [mysql-data:/var/lib/mysql]
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 5s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: [redis-data:/data]
+    restart: unless-stopped
+
+  migrate:
+    <<: *backend
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+
+  api:
+    <<: *backend
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      mysql: { condition: service_healthy }
+      redis: { condition: service_started }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/healthz')"]
+      interval: 15s
+
+  worker:
+    <<: *backend
+    command: ["celery", "-A", "workers.celery_app.celery", "worker", "-l", "info", "--concurrency", "4"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_started }
+
+  beat:   # schedules interrupted-run recovery and evidence retention
+    <<: *backend
+    command: ["celery", "-A", "workers.celery_app.celery", "beat", "-l", "info"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_started }
+
+  web:
+    build: { context: ., dockerfile: deployment/Dockerfile.frontend }
+    ports: ["80:80", "443:443"]
+    volumes: ["./deployment/certs:/etc/nginx/certs:ro"]
+    depends_on: [api]
+    restart: unless-stopped
+
+  ollama:   # optional local model:  docker compose --profile local-ai up -d
+    image: ollama/ollama:latest
+    profiles: [local-ai]
+    volumes: [ollama-data:/root/.ollama]
+    restart: unless-stopped
+
+volumes:
+  mysql-data:
+  redis-data:
+  ollama-data:

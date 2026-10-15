@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from flask import Flask, jsonify, request
 
 from backend.api.common import ApiError
@@ -16,6 +18,14 @@ def create_app(cfg: Config | None = None, *, init: bool = True) -> Flask:
     app.config["MAX_CONTENT_LENGTH"] = 1_000_000
     if init:
         bootstrap(cfg)
+    if os.environ.get("MSP_FAKE_CONNECTORS") == "1":
+        if cfg.env == "production":
+            raise RuntimeError("MSP_FAKE_CONNECTORS must not be enabled in production")
+        from backend.connectors.base import set_connector_factory
+        from backend.connectors.fake import FakeHost, FakeInfrastructure
+        infra = FakeInfrastructure(auto=True)
+        infra.hosts["demo-web.example"] = FakeHost(services={"nginx.service": "failed", "asterisk": "active"}, disk_pct=91)
+        set_connector_factory(infra.factory)
 
     from backend.api import admin, inventory, tasks, webhooks
     for m in (admin, inventory, tasks, webhooks):
