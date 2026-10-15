@@ -1,0 +1,12 @@
+flask>=3.0,<4
+sqlalchemy>=2.0,<2.2
+alembic>=1.13
+pymysql>=1.1
+cryptography>=42
+argon2-cffi>=23.1
+pyjwt>=2.8
+requests>=2.31
+paramiko>=3.4
+celery>=5.4
+redis>=5.0
+gunicorn>=22
